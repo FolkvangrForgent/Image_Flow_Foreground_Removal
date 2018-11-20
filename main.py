@@ -44,8 +44,8 @@ def get_optical_flow_triangle(oldImage, newImage, depth=6):
 		oldI = cv2.resize(oldI, None, fx=0.5, fy=0.5)
 		newI = cv2.resize(newI, None, fx=0.5, fy=0.5)
 		u, v = get_optical_flow(oldI,newI,5)
-		finalU += cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]))
-		finalV += cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]))
+		finalU += cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_CUBIC)
+		finalV += cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_CUBIC)
 	return (finalU, finalV)
 	
 def load_video(subDirectory, fileName):
@@ -61,7 +61,7 @@ def plot(oldImage, newImage, flow):
 	plt.subplot(1,5,5), plt.xticks([]), plt.yticks([]), plt.title("sqrt(u^2+v^2)"), plt.imshow(temp, cmap='gray')
 	plt.show()
 	
-def go_through_flow(video, skipframes=2, startframe=0):
+def go_through_flow(video, skipframes=0, startframe=0):
 	if (video.isOpened()):
 		for i in range(startframe):
 			ret,frame = video.read()
@@ -73,7 +73,8 @@ def go_through_flow(video, skipframes=2, startframe=0):
 				ret,frame = video.read()
 			ret, frame = video.read()
 			new_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-			plot(old_frame,new_frame,get_optical_flow_triangle(old_frame,new_frame,5))
+			u,v = get_optical_flow_triangle(old_frame,new_frame,5)
+			plot(old_frame,new_frame,u,v)
 			old_frame = new_frame
 			
 video = load_video("data","chain_link_fence.mp4")
