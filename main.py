@@ -61,21 +61,20 @@ def plot(oldImage, newImage, flow):
 	plt.subplot(1,5,5), plt.xticks([]), plt.yticks([]), plt.title("sqrt(u^2+v^2)"), plt.imshow(temp, cmap='gray')
 	plt.show()
 	
-def go_through_flow(video, skipframes=2):
+def go_through_flow(video, skipframes=2, startframe=0):
 	if (video.isOpened()):
+		for i in range(startframe):
+			ret,frame = video.read()
 		ret,frame = video.read()
 		old_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 		frame_counter = 0
 		while(video.isOpened()):
-			print(frame_counter)
+			for i in range(frame_counter):
+				ret,frame = video.read()
 			ret, frame = video.read()
-			if frame_counter == skipframes:
-				new_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-				plot(old_frame,new_frame,get_optical_flow_triangle(old_frame,new_frame,5))
-				old_frame = new_frame
-				frame_counter = 0
-			else:
-				frame_counter += 1
+			new_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+			plot(old_frame,new_frame,get_optical_flow_triangle(old_frame,new_frame,5))
+			old_frame = new_frame
 			
 video = load_video("data","chain_link_fence.mp4")
 go_through_flow(video, skipframes=1)
