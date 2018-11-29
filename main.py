@@ -2,7 +2,7 @@ import numpy as np
 import os
 import cv2
 import matplotlib.pyplot as plt
-
+from PIL import Image
 	
 def get_optical_flow(Old_Image, New_Image, window_size=5, debug_level=0, mask=None):
 	kernel_x = np.array([[-1., 1.], [-1., 1.]])
@@ -51,11 +51,14 @@ def get_optical_flow_triangle(oldImage, newImage, window_size=5, depth=6, debug_
 	for i in range(depth):
 		oldI = cv2.pyrDown(oldI)
 		newI = cv2.pyrDown(newI)
+		
 		if mask is not None:
 			mask = np.floor(cv2.resize(np.array(mask,dtype=float), (int(oldI.shape[1]),int(oldI.shape[0])), interpolation = cv2.INTER_LINEAR))
+			
 		u, v = get_optical_flow(oldI,newI,window_size=window_size,debug_level=debug_level-1, mask=mask)
-		finalU += cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
-		finalV += cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+		
+		finalU += cv2.resize(cv2.pyrUp(u), (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+		finalV += cv2.resize(cv2.pyrUp(v), (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
 	return (finalU, finalV)
 	
 def load_video(subDirectory, fileName):
@@ -86,12 +89,12 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 		
 		#set desired shape of image based on which side is longer
 		if old_frame.shape[0]>old_frame.shape[1]:
-			shape = (1280,720)
+			shape = (int(1280/2),int(720/2))
 		else:
-			shape = (720,1280)
+			shape = (int(720/2),int(1280/2))
 		
 		#scale old_frame down to desired shape
-		old_frame = cv2.resize(old_frame, shape, interpolation = cv2.INTER_LINEAR)
+		old_frame = cv2.resize(old_frame, (shape[1],shape[0]), interpolation = cv2.INTER_LINEAR)
 		
 		#matricies to hold image fill data
 		final_image = np.zeros(shape, dtype=int)
@@ -99,6 +102,8 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 		test_pixels = np.full(shape, 1, dtype=int)		#used to compare with set_pixels
 		
 		frame_counter = 0
+		
+		max_val = -1.0
 		
 		if exportFlowVideo:
 			fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -120,19 +125,30 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			
 			ret, frame = video.read()
 			new_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-			new_frame = cv2.resize(new_frame, shape, interpolation = cv2.INTER_LINEAR)
+			new_frame = cv2.resize(new_frame, (shape[1],shape[0]), interpolation = cv2.INTER_LINEAR)
 			
 			u,v = get_optical_flow_triangle(old_frame,new_frame,debug_level=debug_level-1,mask=None)
 			mag = np.sqrt(np.add(np.square(u),np.square(v)))
 			
 			if exportFlowVideo:
-					xFlow.write(u)
-					yFlow.write(v)
-					magFlow.write(mag)
+					
+					#u_cv = np.uint8(((u+u.min())*255)/u.max())
+					#v_cv = np.uint8(((v+v.min())*255)/v.max())
+					#mag_cv = np.resize(np.uint8((mag*255)/mag.max()),(shape[0],shape[1],3))
+					
+					#xFlow.write(u_cv)
+					#yFlow.write(v_cv)
+					#magFlow.write(mag_cv)
+					if max_val == -1.0:
+						max_val = mag.max()
+					mag_t = np.clip(mag,0,max_val)
+					
+					im = Image.fromarray(np.uint8((mag_t*255)/max_val)).convert('RGB')
+					im.save(os.path.join("data","video","mag"+str(frame_counter)+".jpeg"))
 			
 			if debug_level>0:
 				plot_flow(old_frame,new_frame,(u,v))
-
+			
 			for i in range(shape[0]):
 				for j in range(shape[1]): 
 					if mag[i,j]<threshold:
@@ -142,6 +158,6 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			old_frame = new_frame
 			frame_counter += 1
 			
-people = load_video("data","people1.mp4")
-go_through_flow(people, skipframes=0, startframe=33, maxframes=10, debug_level=0,exportFlowVideo=True)
+people = load_video("data","people2.mp4")
+go_through_flow(people, skipframes=0, startframe=33, maxframes=50, debug_level=0,exportFlowVideo=True)
 
