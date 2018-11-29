@@ -105,22 +105,12 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 		
 		max_val = -1.0
 		
-		if exportFlowVideo:
-			fourcc = cv2.VideoWriter_fourcc(*'XVID')
-			xFlow = cv2.VideoWriter('xFlow.avi',fourcc, 20.0, shape)
-			yFlow = cv2.VideoWriter('yFlow.avi',fourcc, 20.0, shape)
-			magFlow = cv2.VideoWriter('magFlow.avi',fourcc, 20.0, shape)
-		
 		while(video.isOpened()):
 			for i in range(skipframes):
 				ret,frame = video.read()
 			
 			if frame_counter == maxframes or np.array_equal(set_pixels, test_pixels) or not video.isOpened():
 				plot_image(final_image)
-				if exportFlowVideo:
-					xFlow.release()
-					yFlow.release()
-					magFlow.release()
 				return
 			
 			ret, frame = video.read()
