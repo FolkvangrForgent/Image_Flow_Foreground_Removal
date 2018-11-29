@@ -54,11 +54,16 @@ def get_optical_flow_triangle(oldImage, newImage, window_size=5, depth=6, debug_
 		
 		if mask is not None:
 			mask = np.floor(cv2.resize(np.array(mask,dtype=float), (int(oldI.shape[1]),int(oldI.shape[0])), interpolation = cv2.INTER_LINEAR))
-			
+		
 		u, v = get_optical_flow(oldI,newI,window_size=window_size,debug_level=debug_level-1, mask=mask)
 		
-		finalU += cv2.resize(cv2.pyrUp(u), (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
-		finalV += cv2.resize(cv2.pyrUp(v), (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+		while oldImage.shape[0]/u.shape[0]>=2.0:
+			u = cv2.pyrUp(u)
+		while oldImage.shape[0]/v.shape[0]>=2.0:
+			v = cv2.pyrUp(v)
+		
+		finalU += cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+		finalV += cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
 	return (finalU, finalV)
 	
 def load_video(subDirectory, fileName):
@@ -148,6 +153,6 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			old_frame = new_frame
 			frame_counter += 1
 			
-people = load_video("data","people2.mp4")
-go_through_flow(people, skipframes=0, startframe=33, maxframes=50, debug_level=0,exportFlowVideo=True)
+video = load_video("data","people_4.mp4")
+go_through_flow(video, skipframes=0, startframe=100, maxframes=100, debug_level=0, exportFlowVideo=True)
 
