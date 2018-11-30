@@ -186,5 +186,5 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			frame_counter += 1
 			
 video = load_video("data","people_3.mp4")
-go_through_flow(video, skipframes=0, startframe=502, maxframes=-1, window_size=9, debug_level=0, exportFlowVideo=True)
+go_through_flow(video, skipframes=0, startframe=0, maxframes=-1, window_size=9, debug_level=0, exportFlowVideo=True)
 
