@@ -4,12 +4,15 @@ import cv2
 import matplotlib.pyplot as plt
 from PIL import Image
 	
-def get_optical_flow(Old_Image, New_Image, window_size=9, debug_level=0, mask=None):
+def get_optical_flow(Old_Image, New_Image, window_size=9, debug_level=0):
 	kernel_x = np.array([[-1., 1.], [-1., 1.]])
 	kernel_y = np.array([[-1., -1.], [1., 1.]])
 	
 	Old_Image = Old_Image / 255. # normalize pixels
 	New_Image = New_Image / 255. # normalize pixels
+	w = int(window_size/2)
+	u=np.zeros(Old_Image.shape)
+	v=np.zeros(Old_Image.shape)
 	
 	Ix = cv2.filter2D(Old_Image,-1,kernel_x)
 	Iy = cv2.filter2D(Old_Image,-1,kernel_y)
@@ -19,53 +22,51 @@ def get_optical_flow(Old_Image, New_Image, window_size=9, debug_level=0, mask=No
 		plot_image(Ix, title="partial x derivative of old image")
 		plot_image(Iy, title="partial y derivative of old image")
 		plot_image(It, title="partial time derivative of images")
+		
+	paramaters = np.zeros(Old_Image.shape+(5,))
+	paramaters[..., 0] = Ix ** 2
+	paramaters[..., 1] = Iy ** 2
+	paramaters[..., 2] = Ix * Iy
+	paramaters[..., 3] = -Ix * It
+	paramaters[..., 4] = -Iy * It
+	del Ix, Iy, It
 	
-	u = np.zeros(Old_Image.shape)
-	v = np.zeros(Old_Image.shape)
+	paramaters_cumulative_sums = np.cumsum(np.cumsum(paramaters, axis=0),axis=1)
+	del paramaters
 	
-	w = int(window_size/2)
+	window_sums = (paramaters_cumulative_sums[2*w+1:, 2*w+1:] - \
+		paramaters_cumulative_sums[2*w+1:, :-1-2*w] - \
+		paramaters_cumulative_sums[:-1-2*w, 2*w+1:] + \
+		paramaters_cumulative_sums[:-1-2*w, :-1-2*w])
+	del paramaters_cumulative_sums
+	
+	det = (window_sums[...,0]*window_sums[..., 1]-window_sums[..., 2]**2)
+	
+	flow_u = np.where(det != 0, \
+		(window_sums[..., 1] * window_sums[..., 3] - \
+		window_sums[..., 2] * window_sums[..., 4]) / det, \
+		0)
+	flow_v = np.where(True, \
+		(window_sums[..., 0] * window_sums[..., 4] - \
+		window_sums[..., 2] * window_sums[..., 3]) / det, \
+		0)
+	del det
+	
+	u = np.pad(flow_u, [(w, w+1), (w+1, w)], mode='constant', constant_values=0)
+	v = np.pad(flow_v, [(w, w+1), (w+1, w)], mode='constant', constant_values=0)
+	del flow_u,flow_v
 
-	for i in range(w, Old_Image.shape[0]-w):
-		for j in range(w, Old_Image.shape[1]-w):
-			if mask is None or mask[i][j][0] == 0.0:
-				tempIx = Ix[i-w:i+w+1, j-w:j+w+1].flatten()
-				tempIy = Iy[i-w:i+w+1, j-w:j+w+1].flatten()
-				tempIt = It[i-w:i+w+1, j-w:j+w+1].flatten()
-				b = np.reshape(tempIt, (tempIt.shape[0],1)) # get b here
-				A = np.vstack((tempIx, tempIy)).T # get A here
-			
-				eigns = np.linalg.eigvals(np.matmul(A.T, A))
-				eign1 = eigns[0]
-				eign2 = eigns[1]
-				if np.min(abs(np.linalg.eigvals(np.matmul(A.T, A)))) >= 1e-2:
-					if True:
-						x = np.linalg.pinv(A.T @ A) @ A.T @ b
-						u[i,j] = x[0]
-						v[i,j] = x[1]
 	return (u,v)
 
-def get_optical_flow_triangle(oldImage, newImage, window_size=9, depth=6, debug_level=0, mask=None):
+def get_optical_flow_triangle(oldImage, newImage, window_size=9, depth=6, debug_level=0):
 	oldI = oldImage
 	newI = newImage
-	n_w = window_size
-	finalU,finalV = get_optical_flow(oldI,newI,window_size=n_w,debug_level=debug_level-1,mask=mask)
+	finalU,finalV = get_optical_flow(oldI,newI,window_size=window_size,debug_level=debug_level-1)
 	for i in range(depth):
 		oldI = cv2.pyrDown(oldI)
 		newI = cv2.pyrDown(newI)
 		
-		if mask is not None:
-			mask = np.floor(cv2.resize(np.array(mask,dtype=float), (int(oldI.shape[1]),int(oldI.shape[0])), interpolation = cv2.INTER_LINEAR))
-		
-		n_w = int(n_w*(2/3))
-		if n_w%2 == 0:
-			n_w += 1
-		
-		u, v = get_optical_flow(oldI,newI,window_size=n_w,debug_level=debug_level-1, mask=mask)
-		
-		while oldImage.shape[0]/u.shape[0]>1.0:
-			u = cv2.pyrUp(u)
-		while oldImage.shape[0]/v.shape[0]>1.0:
-			v = cv2.pyrUp(v)
+		u, v = get_optical_flow(oldI,newI,window_size=window_size,debug_level=debug_level-1)
 		
 		finalU += cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
 		finalV += cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
@@ -103,9 +104,9 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 		
 		#set desired shape of image based on which side is longer
 		if old_frame.shape[0]>old_frame.shape[1]:
-			shape = (int(1280/2),int(720/2))
+			shape = (int(1280),int(720))
 		else:
-			shape = (int(720/2),int(1280/2))
+			shape = (int(720),int(1280))
 		
 		#scale old_frame down to desired shape
 		old_frame = cv2.resize(old_frame, (shape[1],shape[0]), interpolation = cv2.INTER_LINEAR)
@@ -131,8 +132,8 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 				ret, frame = video.read()
 			
 			if ( maxframes!=-1 and frame_counter == maxframes) or not video.isOpened() or frame is None:
-				plot_image(final_image)
-				plot_image(set_pixels)
+				plot_image(final_image, title="Produced Image")
+				plot_image(set_pixels, title="Cofidence")
 				return
 				
 			new_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -140,7 +141,12 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			
 			print("On flow "+str(frame_counter))
 			
-			u,v = get_optical_flow_triangle(old_frame,new_frame,debug_level=debug_level-1,mask=None,window_size=window_size)
+			feature_params = dict( maxCorners = 100,
+                       qualityLevel = 0.3,
+                       minDistance = 7,
+                       blockSize = 7 )
+			
+			u,v = get_optical_flow_triangle(old_frame,new_frame,debug_level=debug_level-1,window_size=window_size)
 			mag = np.sqrt(np.add(np.square(u),np.square(v)))
 			
 			if exportFlowVideo:
@@ -185,6 +191,6 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			old_frame = new_frame
 			frame_counter += 1
 			
-video = load_video("data","people_3.mp4")
-go_through_flow(video, skipframes=0, startframe=0, maxframes=-1, window_size=9, debug_level=0, exportFlowVideo=True)
+video = load_video("data","morepeople.mp4")
+go_through_flow(video, skipframes=0, startframe=50, maxframes=100, window_size=9, debug_level=0, exportFlowVideo=True)
 
