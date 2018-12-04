@@ -27,8 +27,8 @@ def get_optical_flow(Old_Image, New_Image, window_size=9, debug_level=0):
 	paramaters[..., 0] = Ix ** 2
 	paramaters[..., 1] = Iy ** 2
 	paramaters[..., 2] = Ix * Iy
-	paramaters[..., 3] = -Ix * It
-	paramaters[..., 4] = -Iy * It
+	paramaters[..., 3] = Ix * It
+	paramaters[..., 4] = Iy * It
 	del Ix, Iy, It
 	
 	paramaters_cumulative_sums = np.cumsum(np.cumsum(paramaters, axis=0),axis=1)
@@ -43,13 +43,13 @@ def get_optical_flow(Old_Image, New_Image, window_size=9, debug_level=0):
 	det = (window_sums[...,0]*window_sums[..., 1]-window_sums[..., 2]**2)
 	
 	flow_u = np.where(det != 0, \
-		(window_sums[..., 1] * window_sums[..., 3] - \
+		(-window_sums[..., 1] * window_sums[..., 3] + \
 		window_sums[..., 2] * window_sums[..., 4]) / det, \
-		0)
-	flow_v = np.where(True, \
-		(window_sums[..., 0] * window_sums[..., 4] - \
+		1.0)
+	flow_v = np.where(det != 0, \
+		(-window_sums[..., 0] * window_sums[..., 4] + \
 		window_sums[..., 2] * window_sums[..., 3]) / det, \
-		0)
+		1.0)
 	del det
 	
 	u = np.pad(flow_u, [(w, w+1), (w+1, w)], mode='constant', constant_values=0)
@@ -58,7 +58,7 @@ def get_optical_flow(Old_Image, New_Image, window_size=9, debug_level=0):
 
 	return (u,v)
 
-def get_optical_flow_triangle(oldImage, newImage, window_size=9, depth=6, debug_level=0):
+def get_optical_flow_triangle(oldImage, newImage, window_size=9, depth=4, debug_level=0):
 	oldI = oldImage
 	newI = newImage
 	finalU,finalV = get_optical_flow(oldI,newI,window_size=window_size,debug_level=debug_level-1)
@@ -66,10 +66,21 @@ def get_optical_flow_triangle(oldImage, newImage, window_size=9, depth=6, debug_
 		oldI = cv2.pyrDown(oldI)
 		newI = cv2.pyrDown(newI)
 		
+		window_size=int(window_size/2)
+		if (window_size%2 == 0):
+			window_size+=1
+		if (window_size<3):
+			window_size=3
+		
 		u, v = get_optical_flow(oldI,newI,window_size=window_size,debug_level=debug_level-1)
 		
-		finalU += cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
-		finalV += cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+		while oldImage.shape[0]/u.shape[0]>1.0:
+			u = cv2.pyrUp(u)
+		while oldImage.shape[0]/v.shape[0]>1.0:
+			v = cv2.pyrUp(v)
+			
+		finalU += 1/2*cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+		finalV += 1/2*cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
 	return (finalU, finalV)
 	
 def load_video(subDirectory, fileName):
@@ -104,9 +115,9 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 		
 		#set desired shape of image based on which side is longer
 		if old_frame.shape[0]>old_frame.shape[1]:
-			shape = (int(1280),int(720))
+			shape = (int(1280*2),int(720*2))
 		else:
-			shape = (int(720),int(1280))
+			shape = (int(720*2),int(1280*2))
 		
 		#scale old_frame down to desired shape
 		old_frame = cv2.resize(old_frame, (shape[1],shape[0]), interpolation = cv2.INTER_LINEAR)
@@ -119,8 +130,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 		previos_frames = np.zeros((3,shape[0],shape[1]))
 		
 		frame_counter = 0
-		
-		max_val = -1.0
+		max_set_val = -1.0
 		
 		while(video.isOpened()):
 			for i in range(skipframes):
@@ -149,22 +159,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			u,v = get_optical_flow_triangle(old_frame,new_frame,debug_level=debug_level-1,window_size=window_size)
 			mag = np.sqrt(np.add(np.square(u),np.square(v)))
 			
-			if exportFlowVideo:
-					
-					#u_cv = np.uint8(((u+u.min())*255)/u.max())
-					#v_cv = np.uint8(((v+v.min())*255)/v.max())
-					#mag_cv = np.resize(np.uint8((mag*255)/mag.max()),(shape[0],shape[1],3))
-					
-					#xFlow.write(u_cv)
-					#yFlow.write(v_cv)
-					#magFlow.write(mag_cv)
-					if max_val == -1.0:
-						max_val = mag.sum()/(mag.shape[0]*mag.shape[1])
-					
-					im = Image.fromarray(np.uint8((mag*255)/mag.max())).convert('RGB')
-					sim = Image.fromarray(np.uint8((np.clip(mag,0,max_val*2)*255)/max_val*2)).convert('RGB')
-					im.save(os.path.join("data","video","mag"+str(frame_counter)+".jpeg"))
-					sim.save(os.path.join("data","video","smag"+str(frame_counter)+".jpeg"))
+			
 			
 			if debug_level>0:
 				plot_flow(old_frame,new_frame,(u,v))
@@ -188,9 +183,41 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 							final_image[i,j] = previos_frames[(frame_counter+1)%3][i,j]
 							set_pixels[i,j] = magn[i,j]
 			
+				if exportFlowVideo:
+					if max_set_val == -1.0:
+						max_set_val = set_pixels.max()
+						
+					flowoo = np.zeros(shape + (3,), dtype=np.uint8)
+					flowii = np.uint8(np.array([np.clip(u*125,0,255),np.abs(np.clip(u*125,-255,0)),mag*0]))
+					flowoo[:,:,0] = flowii[0,:,:]
+					flowoo[:,:,1] = flowii[1,:,:]
+					flowoo[:,:,2] = flowii[2,:,:]
+					magl = Image.fromarray(flowoo,'RGB')
+					magl.save(os.path.join("data","video","u"+str(frame_counter)+".jpeg"))
+					
+					flowii = np.uint8(np.array([np.clip(v*125,0,255),np.abs(np.clip(v*125,-255,0)),mag*0]))
+					flowoo[:,:,0] = flowii[0,:,:]
+					flowoo[:,:,1] = flowii[1,:,:]
+					flowoo[:,:,2] = flowii[2,:,:]
+					magl = Image.fromarray(flowoo,'RGB')
+					magl.save(os.path.join("data","video","v"+str(frame_counter)+".jpeg"))
+					
+					flowii = np.uint8(np.array([np.clip(mag*125,0,255),np.clip(mag*125,0,255),np.clip(mag*125,0,255)]))
+					flowoo[:,:,0] = flowii[0,:,:]
+					flowoo[:,:,1] = flowii[1,:,:]
+					flowoo[:,:,2] = flowii[2,:,:]
+					magl = Image.fromarray(flowoo,'RGB')
+					magl.save(os.path.join("data","video","mag"+str(frame_counter)+".jpeg"))
+					
+					
+					con = Image.fromarray(np.uint8((set_pixels*255)/max_set_val)).convert('RGB')
+					fin = Image.fromarray(np.uint8(final_image)).convert('RGB')
+					con.save(os.path.join("data","video","con"+str(frame_counter)+".jpeg"))
+					fin.save(os.path.join("data","video","fin"+str(frame_counter)+".jpeg"))
+			
 			old_frame = new_frame
 			frame_counter += 1
 			
 video = load_video("data","morepeople.mp4")
-go_through_flow(video, skipframes=0, startframe=50, maxframes=100, window_size=9, debug_level=0, exportFlowVideo=True)
+go_through_flow(video, skipframes=0, startframe=10, maxframes=100, window_size=7, debug_level=0, exportFlowVideo=True)
 
