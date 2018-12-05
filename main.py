@@ -115,9 +115,9 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 		
 		#set desired shape of image based on which side is longer
 		if old_frame.shape[0]>old_frame.shape[1]:
-			shape = (int(1280*2),int(720*2))
+			shape = (int(1280),int(720))
 		else:
-			shape = (int(720*2),int(1280*2))
+			shape = (int(720),int(1280))
 		
 		#scale old_frame down to desired shape
 		old_frame = cv2.resize(old_frame, (shape[1],shape[0]), interpolation = cv2.INTER_LINEAR)
@@ -178,7 +178,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 				magn /= 12
 				
 				for i in range(shape[0]):
-					for j in range(shape[1]): 
+					for j in range(shape[1]):
 						if magn[i,j]<set_pixels[i,j]:
 							final_image[i,j] = previos_frames[(frame_counter+1)%3][i,j]
 							set_pixels[i,j] = magn[i,j]
@@ -201,6 +201,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 					flowoo[:,:,2] = flowii[2,:,:]
 					magl = Image.fromarray(flowoo,'RGB')
 					magl.save(os.path.join("data","video","v"+str(frame_counter)+".jpeg"))
+					
 					
 					flowii = np.uint8(np.array([np.clip(mag*125,0,255),np.clip(mag*125,0,255),np.clip(mag*125,0,255)]))
 					flowoo[:,:,0] = flowii[0,:,:]
