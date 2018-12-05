@@ -45,11 +45,11 @@ def get_optical_flow(Old_Image, New_Image, window_size=9, debug_level=0):
 	flow_u = np.where(det != 0, \
 		(-window_sums[..., 1] * window_sums[..., 3] + \
 		window_sums[..., 2] * window_sums[..., 4]) / det, \
-		1.0)
+		0.0)
 	flow_v = np.where(det != 0, \
 		(-window_sums[..., 0] * window_sums[..., 4] + \
 		window_sums[..., 2] * window_sums[..., 3]) / det, \
-		1.0)
+		0.0)
 	del det
 	
 	u = np.pad(flow_u, [(w, w+1), (w+1, w)], mode='constant', constant_values=0)
@@ -79,8 +79,8 @@ def get_optical_flow_triangle(oldImage, newImage, window_size=9, depth=4, debug_
 		while oldImage.shape[0]/v.shape[0]>1.0:
 			v = cv2.pyrUp(v)
 			
-		finalU += 1/2*cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
-		finalV += 1/2*cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+		finalU += cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+		finalV += cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
 	return (finalU, finalV)
 	
 def load_video(subDirectory, fileName):
