@@ -92,13 +92,6 @@ def lk_flow_improved(Old_Image, New_Image, window_size, debug_level=0):
 	ATA = np.nan_to_num(np.array([[paramaters[..., 0],paramaters[..., 2]],[paramaters[..., 2],paramaters[..., 1]]]))
 	eigns = np.nan_to_num(np.linalg.eigvals(ATA.T).T)
 	
-	if False:
-		test = np.where((eigns[0:,:] < eigns[1,:,:]), 1.0, 0.0)
-		test2 = np.where((eigns[0:,:] > eigns[1,:,:]), 1.0, 0.0)
-		plot_image(test[0])
-		plot_image(test2[0])
-	
-	
 	mineign = np.minimum(eigns[0,:,:],eigns[1,:,:]) 
 	maxeign = np.maximum(eigns[0,:,:],eigns[1,:,:]) 
 	
@@ -137,27 +130,39 @@ def generate_window_size_pyramid(windowSize, depth, minSize=3):
 def flow_warp(image, u, v):
 	u = np.array(cv2.pyrUp(u, dstsize=(image.shape[1],image.shape[0])), dtype=np.float32)
 	v = np.array(cv2.pyrUp(v, dstsize=(image.shape[1],image.shape[0])), dtype=np.float32)
-	return cv2.remap(image,u,v,cv2.INTER_LINEAR)
 	
+	print(v.shape)
+	for x in range(u.shape[1]):
+		for y in range(u.shape[0]):
+			u[y,x]=x-u[y,x]
+			v[y,x]=y-v[y,x]
+	
+	flow = np.dstack((u,v))
+	remap = cv2.remap(image,flow,None,cv2.INTER_LINEAR)
+	return remap
+
 def coarse_to_fine_lk_flow(oldImage, newImage, window_size=9, debug_level=0):
 	oldImagePyramids = generate_image_pyramid(oldImage)
 	newImagePyramids = generate_image_pyramid(newImage)
 	windowSizePyramid = generate_window_size_pyramid(window_size, len(oldImagePyramids)) 
 	finalU = np.zeros(oldImage.shape)
 	finalV = np.zeros(oldImage.shape)
+	tempU = np.zeros((int(oldImagePyramids[0].shape[0]/2),int(oldImagePyramids[0].shape[1]/2)))
+	tempV = np.zeros((int(oldImagePyramids[0].shape[0]/2),int(oldImagePyramids[0].shape[1]/2)))
 	for i in range(len(oldImagePyramids)):
 		
 		u,v = lk_flow_improved(oldImagePyramids[i],newImagePyramids[i],windowSizePyramid[i],debug_level=debug_level-1)
-		plot_image(oldImagePyramids[i])
-		plot_image(newImagePyramids[i])
-		plot_image(u)
-		plot_image(v)
+		tempU = np.array(cv2.pyrUp(tempU, dstsize=(oldImagePyramids[i].shape[1],oldImagePyramids[i].shape[0])), dtype=np.float32)+u
+		tempV = np.array(cv2.pyrUp(tempV, dstsize=(oldImagePyramids[i].shape[1],oldImagePyramids[i].shape[0])), dtype=np.float32)+v
 		
 		if i+1 != len(oldImagePyramids):
-			oldImagePyramids[i+1]=flow_warp(oldImagePyramids[i+1],u,v)
-			
-		finalU += cv2.resize(u, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
-		finalV += cv2.resize(v, (oldImage.shape[1],oldImage.shape[0]), interpolation = cv2.INTER_LINEAR)
+			oldImagePyramids[i+1]=flow_warp(oldImagePyramids[i+1],tempU,tempV)
+	
+	print(oldImagePyramids[-1].shape)
+	print((oldImage.shape))
+	
+	finalU = tempU
+	finalV = tempV
 	return (finalU, finalV)
 	
 def load_video(subDirectory, fileName):
@@ -202,7 +207,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 		
 		#matricies to hold image fill data
 		final_image = np.zeros(shape, dtype=int)
-		set_pixels = np.full(shape, 1.0, dtype=float)
+		set_pixels = np.full(shape, 255.0, dtype=float)
 		
 		previos_mags = np.zeros((5,shape[0],shape[1]))
 		previos_frames = np.zeros((3,shape[0],shape[1]))
@@ -235,9 +240,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
                        blockSize = 7 )
 			
 			u,v = coarse_to_fine_lk_flow(old_frame,new_frame,debug_level=debug_level-1,window_size=window_size)
-			mag = np.sqrt(np.add(np.square(u),np.square(v)))
-			
-			
+			mag = np.log(np.sqrt(np.add(np.square(u),np.square(v))))
 			
 			if debug_level>0:
 				plot_flow(old_frame,new_frame,(u,v))
@@ -260,6 +263,8 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 						if magn[i,j]<set_pixels[i,j]:
 							final_image[i,j] = previos_frames[(frame_counter+1)%3][i,j]
 							set_pixels[i,j] = magn[i,j]
+						else:
+							set_pixels[i,j] *= .95
 			
 				if exportFlowVideo:
 					if max_set_val == -1.0:
@@ -289,6 +294,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			frame_counter += 1
 			
 video = load_video("data","morepeople.mp4")
-video2 = load_video("data","simple2.avi")
-go_through_flow(video, skipframes=0, startframe=0, maxframes=200, window_size=21, debug_level=0, exportFlowVideo=True)
+video2 = load_video("data","chain_link_fence.mp4")
+video3 = load_video("data","simple2.avi")
+go_through_flow(video2, skipframes=0, startframe=0, maxframes=200, window_size=15, debug_level=0, exportFlowVideo=True)
 
