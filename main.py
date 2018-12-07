@@ -3,6 +3,7 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 from PIL import Image
+from timeit import default_timer as timer
 	
 def lk_flow_fast(Old_Image, New_Image, window_size=9, debug_level=0):
 	kernel_x = np.array([[-1., 1.], [-1., 1.]])
@@ -131,7 +132,7 @@ def flow_warp(image, u, v):
 	u = np.array(cv2.pyrUp(u, dstsize=(image.shape[1],image.shape[0])), dtype=np.float32)
 	v = np.array(cv2.pyrUp(v, dstsize=(image.shape[1],image.shape[0])), dtype=np.float32)
 	
-	print(v.shape)
+	print("\t"+str(v.shape))
 	for x in range(u.shape[1]):
 		for y in range(u.shape[0]):
 			u[y,x]=x-u[y,x]
@@ -145,24 +146,17 @@ def coarse_to_fine_lk_flow(oldImage, newImage, window_size=9, debug_level=0):
 	oldImagePyramids = generate_image_pyramid(oldImage)
 	newImagePyramids = generate_image_pyramid(newImage)
 	windowSizePyramid = generate_window_size_pyramid(window_size, len(oldImagePyramids)) 
-	finalU = np.zeros(oldImage.shape)
-	finalV = np.zeros(oldImage.shape)
-	tempU = np.zeros((int(oldImagePyramids[0].shape[0]/2),int(oldImagePyramids[0].shape[1]/2)))
-	tempV = np.zeros((int(oldImagePyramids[0].shape[0]/2),int(oldImagePyramids[0].shape[1]/2)))
+	finalU = np.zeros((int(oldImagePyramids[0].shape[0]/2),int(oldImagePyramids[0].shape[1]/2)))
+	finalV = np.zeros((int(oldImagePyramids[0].shape[0]/2),int(oldImagePyramids[0].shape[1]/2)))
 	for i in range(len(oldImagePyramids)):
 		
 		u,v = lk_flow_improved(oldImagePyramids[i],newImagePyramids[i],windowSizePyramid[i],debug_level=debug_level-1)
-		tempU = np.array(cv2.pyrUp(tempU, dstsize=(oldImagePyramids[i].shape[1],oldImagePyramids[i].shape[0])), dtype=np.float32)+u
-		tempV = np.array(cv2.pyrUp(tempV, dstsize=(oldImagePyramids[i].shape[1],oldImagePyramids[i].shape[0])), dtype=np.float32)+v
+		finalU = np.array(cv2.pyrUp(finalU, dstsize=(oldImagePyramids[i].shape[1],oldImagePyramids[i].shape[0])), dtype=np.float32)+u
+		finalV = np.array(cv2.pyrUp(finalV, dstsize=(oldImagePyramids[i].shape[1],oldImagePyramids[i].shape[0])), dtype=np.float32)+v
 		
 		if i+1 != len(oldImagePyramids):
-			oldImagePyramids[i+1]=flow_warp(oldImagePyramids[i+1],tempU,tempV)
-	
-	print(oldImagePyramids[-1].shape)
-	print((oldImage.shape))
-	
-	finalU = tempU
-	finalV = tempV
+			oldImagePyramids[i+1]=flow_warp(oldImagePyramids[i+1],finalU,finalV)
+			
 	return (finalU, finalV)
 	
 def load_video(subDirectory, fileName):
@@ -178,11 +172,12 @@ def plot_flow(oldImage, newImage, flow):
 	plt.subplot(1,5,5), plt.xticks([]), plt.yticks([]), plt.title("sqrt(u^2+v^2)"), plt.imshow(temp, cmap='gray')
 	plt.show()
 	
-def plot_image(image, title=""):
-	plt.xticks([]), plt.yticks([]), plt.title(title), plt.imshow(image)
+def plot_image(image, title="", cmap='rgb'):
+	plt.xticks([]), plt.yticks([]), plt.title(title), plt.imshow(image, cmap=cmap)
 	plt.show()
 	
 def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level=0, threshold=5e-3, exportFlowVideo=False, window_size=9):
+	start = timer()
 	if (video.isOpened()):
 		for i in range(startframe):
 			ret,frame = video.read()
@@ -240,7 +235,8 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
                        blockSize = 7 )
 			
 			u,v = coarse_to_fine_lk_flow(old_frame,new_frame,debug_level=debug_level-1,window_size=window_size)
-			mag = np.log(np.sqrt(np.add(np.square(u),np.square(v))))
+			mag = np.arctan(np.sqrt(np.add(np.square(u),np.square(v))))*2/np.pi
+			
 			
 			if debug_level>0:
 				plot_flow(old_frame,new_frame,(u,v))
@@ -264,7 +260,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 							final_image[i,j] = previos_frames[(frame_counter+1)%3][i,j]
 							set_pixels[i,j] = magn[i,j]
 						else:
-							set_pixels[i,j] *= .95
+							set_pixels[i,j] *= .9
 			
 				if exportFlowVideo:
 					if max_set_val == -1.0:
@@ -272,7 +268,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 						
 					flowenc = np.zeros(shape + (3,), dtype=np.uint8)
 					flowenc[:,:,0] = np.arctan(v,u)*57.2958
-					flowenc[:,:,1] = np.clip(mag*125,0,255)
+					flowenc[:,:,1] = np.clip(mag*255,0,255)
 					flowenc[:,:,2] = 200
 					encodedFlow = Image.fromarray(flowenc,'HSV').convert('RGB')
 					encodedFlow.save(os.path.join("data","video","flow"+str(frame_counter)+".jpeg"))
@@ -292,9 +288,10 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			
 			old_frame = new_frame
 			frame_counter += 1
-			
+	elapsed_time = timer() - start
+	print(str(elapsed_time))
 video = load_video("data","morepeople.mp4")
 video2 = load_video("data","chain_link_fence.mp4")
 video3 = load_video("data","simple2.avi")
-go_through_flow(video2, skipframes=0, startframe=0, maxframes=200, window_size=15, debug_level=0, exportFlowVideo=True)
+go_through_flow(video2, skipframes=0, startframe=0, maxframes=-1, window_size=15, debug_level=0, exportFlowVideo=True)
 
