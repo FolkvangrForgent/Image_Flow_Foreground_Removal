@@ -235,7 +235,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
                        blockSize = 7 )
 			
 			u,v = coarse_to_fine_lk_flow(old_frame,new_frame,debug_level=debug_level-1,window_size=window_size)
-			mag = np.arctan(np.sqrt(np.add(np.square(u),np.square(v))))*2/np.pi
+			mag = np.arctan(np.sqrt(np.add(np.square(u),np.square(v)))/2)*2/np.pi
 			
 			
 			if debug_level>0:
@@ -263,28 +263,16 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 							set_pixels[i,j] *= .9
 			
 				if exportFlowVideo:
-					if max_set_val == -1.0:
-						max_set_val = set_pixels.max()
-						
-					flowenc = np.zeros(shape + (3,), dtype=np.uint8)
-					flowenc[:,:,0] = np.arctan(v,u)*57.2958
-					flowenc[:,:,1] = np.clip(mag*255,0,255)
-					flowenc[:,:,2] = 200
-					encodedFlow = Image.fromarray(flowenc,'HSV').convert('RGB')
-					encodedFlow.save(os.path.join("data","video","flow"+str(frame_counter)+".jpeg"))
-					
-					#con = Image.fromarray(np.uint8((set_pixels*255)/max_set_val)).convert('RGB')
 					final = Image.fromarray(np.uint8(final_image)).convert('RGB')
-					#con.save(os.path.join("data","video","confidence"+str(frame_counter)+".jpeg"))
 					final.save(os.path.join("data","video","final"+str(frame_counter)+".jpeg"))
-			else:
-				if exportFlowVideo:
-					flowenc = np.zeros(shape + (3,), dtype=np.uint8)
-					flowenc[:,:,0] = np.arctan(v,u)*57.2958
-					flowenc[:,:,1] = np.clip(mag*125,0,255)
-					flowenc[:,:,2] = 200
-					encodedFlow = Image.fromarray(flowenc,'HSV').convert('RGB')
-					encodedFlow.save(os.path.join("data","video","flow"+str(frame_counter)+".jpeg"))
+			
+			if exportFlowVideo:
+				flowenc = np.zeros(shape + (3,), dtype=np.uint8)
+				flowenc[:,:,0] = np.arctan(v,u)*57.2958
+				flowenc[:,:,1] = np.clip(mag*255,0,255)
+				flowenc[:,:,2] = 200
+				encodedFlow = Image.fromarray(flowenc,'HSV').convert('RGB')
+				encodedFlow.save(os.path.join("data","video","flow"+str(frame_counter)+".jpeg"))
 			
 			old_frame = new_frame
 			frame_counter += 1
