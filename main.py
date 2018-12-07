@@ -241,7 +241,9 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 			if debug_level>0:
 				plot_flow(old_frame,new_frame,(u,v))
 				
-			previos_mags[frame_counter%5] = mag
+			mags = cv2.GaussianBlur(mag,(25,25),0)
+				
+			previos_mags[frame_counter%5] = mags
 			previos_frames[frame_counter%3] = old_frame
 			
 			if frame_counter>=4:
@@ -260,7 +262,7 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 							final_image[i,j] = previos_frames[(frame_counter+1)%3][i,j]
 							set_pixels[i,j] = magn[i,j]
 						else:
-							set_pixels[i,j] *= .9
+							pass
 			
 				if exportFlowVideo:
 					final = Image.fromarray(np.uint8(final_image)).convert('RGB')
@@ -281,5 +283,5 @@ def go_through_flow(video, skipframes=0, startframe=0, maxframes=10, debug_level
 video = load_video("data","morepeople.mp4")
 video2 = load_video("data","chain_link_fence.mp4")
 video3 = load_video("data","simple2.avi")
-go_through_flow(video2, skipframes=0, startframe=0, maxframes=-1, window_size=15, debug_level=0, exportFlowVideo=True)
+go_through_flow(video, skipframes=0, startframe=0, maxframes=200, window_size=15, debug_level=0, exportFlowVideo=True)
 
